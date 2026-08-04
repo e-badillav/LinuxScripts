@@ -44,16 +44,16 @@ except ImportError:
 
 # ThreatDown API credentials (OAuth2 client_credentials)
 # Generate at: Nebula Console -> Integrate -> OAuth2 Clients
-CLIENT_ID     = os.environ.get("THREATDOWN_CLIENT_ID", "YOUR_CLIENT_ID")
-CLIENT_SECRET = os.environ.get("THREATDOWN_CLIENT_SECRET", "YOUR_CLIENT_SECRET")
+CLIENT_ID     = "YOUR_CLIENT_ID"
+CLIENT_SECRET = "YOUR_CLIENT_SECRET"
 
 # Nebula Account ID (UUID from the console URL)
 # Example: If your console URL is https://cloud.malwarebytes.com/nebula/123e4567-e89b-...
 # Then ACCOUNT_ID = "123e4567-e89b-..."
-ACCOUNT_ID    = os.environ.get("THREATDOWN_ACCOUNT_ID", "YOUR_ACCOUNT_ID")
+ACCOUNT_ID    = "YOUR_ACCOUNT_ID"
 
 # API variant: "nebula" or "oneview"
-API_VARIANT   = os.environ.get("THREATDOWN_API_VARIANT", "nebula")
+API_VARIANT   = "nebula"
 
 # Base URL
 API_BASE_URL  = "https://api.malwarebytes.com"
