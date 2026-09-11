@@ -1,0 +1,51 @@
+<!-- =============================================================================
+     decoder.xml
+     Wazuh Custom Decoder — SyslogAlertForwarder (IDS/IPS sensor alerts)
+     =============================================================================
+     Description:
+       Decodes attack alerts relayed by "SyslogAlertForwarder" (e.g. an
+       IntruShield/NSP-style IDS/IPS sensor forwarding detections over syslog).
+
+       Sample log:
+         Sep 11 13:18:32 10.225.29.131 SyslogAlertForwarder: Sep 11, 2026 13:18:32 : \
+         rjo1.sensor.ns7k detected Inbound attack RPC: Portmap Dump Request \
+         (severity = Low) SIG:DumpRequest Category:Exploit. \
+         66.132.186.211:2474 -> 200.160.170.251:111 (result = Inconclusive)
+
+       Wazuh's own pre-decoder already extracts the standard syslog header
+       (timestamp, hostname, program_name), leaving the following for these
+       decoders to parse:
+         Sep 11, 2026 13:18:32 : rjo1.sensor.ns7k detected Inbound attack RPC: \
+         Portmap Dump Request (severity = Low) SIG:DumpRequest Category:Exploit. \
+         66.132.186.211:2474 -> 200.160.170.251:111 (result = Inconclusive)
+
+     Fields extracted (available as dynamic fields to rules, e.g. $(srcip)):
+       sensor        - reporting sensor name (e.g. rjo1.sensor.ns7k)
+       direction     - Inbound / Outbound
+       attack_name   - attack/signature description (e.g. "RPC: Portmap Dump Request")
+       severity      - Low / Medium / High
+       signature_id  - short signature identifier (e.g. DumpRequest)
+       category      - attack category (e.g. Exploit, Recon, DoS)
+       srcip/srcport - attacker IP and port
+       dstip/dstport - target IP and port
+       result        - action outcome (e.g. Blocked, Inconclusive, Allowed)
+
+     Deployment:
+       /var/ossec/etc/decoders/syslog-alert-forwarder_decoder.xml
+       Permissions: 640, Owner: root:wazuh
+       Restart the manager after copying: systemctl restart wazuh-manager
+
+     Testing:
+       /var/ossec/bin/wazuh-logtest
+     ============================================================================= -->
+
+<decoder name="syslog-alert-forwarder">
+  <program_name>^SyslogAlertForwarder</program_name>
+</decoder>
+
+<decoder name="syslog-alert-forwarder-attack">
+  <parent>syslog-alert-forwarder</parent>
+  <prematch>^\S+ \d+, \d+ \d+:\d+:\d+ : \S+ detected \S+ attack</prematch>
+  <regex>^\S+ \d+, \d+ \d+:\d+:\d+ : (\S+) detected (\S+) attack (.+) \(severity = (\S+)\) SIG:(\S+) Category:(\w+)\. (\d+.\d+.\d+.\d+):(\d+) -> (\d+.\d+.\d+.\d+):(\d+) \(result = (\S+)\)$</regex>
+  <order>sensor, direction, attack_name, severity, signature_id, category, srcip, srcport, dstip, dstport, result</order>
+</decoder>

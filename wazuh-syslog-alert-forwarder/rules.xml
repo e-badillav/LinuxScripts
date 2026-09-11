@@ -1,0 +1,62 @@
+<!-- =============================================================================
+     rules.xml
+     Wazuh Custom Rules — SyslogAlertForwarder (IDS/IPS sensor alerts)
+     =============================================================================
+     Description:
+       Rules for alerts decoded by "syslog-alert-forwarder-attack" (see
+       decoder.xml). Escalates the alert level based on the severity reported
+       by the sensor, and further escalates when the sensor did not
+       confirm the attack was blocked.
+
+     Rule ID range: 100200-100299 (local/custom range, safe from base ruleset
+     upgrades, per Wazuh's reserved 100000-120000 window).
+
+     Note: rule 100204 uses type="pcre2" for a negative lookahead (requires
+     Wazuh 4.x+, which ships PCRE2-backed rule matching). If unsupported in
+     your version, remove that rule or replace it with an explicit list of
+     "not blocked" result values, e.g. <field name="result">^Inconclusive$|^Allowed$</field>.
+
+     Deployment:
+       /var/ossec/etc/rules/syslog-alert-forwarder_rules.xml
+       Permissions: 640, Owner: root:wazuh
+       Restart the manager after copying: systemctl restart wazuh-manager
+
+     Testing:
+       /var/ossec/bin/wazuh-logtest
+     ============================================================================= -->
+
+<group name="syslog,ids,attack,">
+
+  <rule id="100200" level="5">
+    <decoded_as>syslog-alert-forwarder-attack</decoded_as>
+    <description>SyslogAlertForwarder: $(direction) attack "$(attack_name)" detected by $(sensor) ($(srcip):$(srcport) -> $(dstip):$(dstport)).</description>
+    <group>syslog_alert_forwarder,</group>
+  </rule>
+
+  <rule id="100201" level="5">
+    <if_sid>100200</if_sid>
+    <field name="severity">^Low$</field>
+    <description>SyslogAlertForwarder: Low severity $(direction) attack "$(attack_name)" from $(srcip):$(srcport) to $(dstip):$(dstport) (result: $(result)).</description>
+  </rule>
+
+  <rule id="100202" level="8">
+    <if_sid>100200</if_sid>
+    <field name="severity">^Medium$</field>
+    <description>SyslogAlertForwarder: Medium severity $(direction) attack "$(attack_name)" from $(srcip):$(srcport) to $(dstip):$(dstport) (result: $(result)).</description>
+  </rule>
+
+  <rule id="100203" level="12">
+    <if_sid>100200</if_sid>
+    <field name="severity">^High$</field>
+    <description>SyslogAlertForwarder: High severity $(direction) attack "$(attack_name)" from $(srcip):$(srcport) to $(dstip):$(dstport) (result: $(result)).</description>
+    <group>gdpr_IV_35.7.d,</group>
+  </rule>
+
+  <rule id="100204" level="10">
+    <if_sid>100202,100203</if_sid>
+    <field name="result" type="pcre2">^(?!Blocked)\S+$</field>
+    <description>SyslogAlertForwarder: $(severity) severity attack "$(attack_name)" from $(srcip):$(srcport) to $(dstip):$(dstport) was NOT blocked (result: $(result)).</description>
+    <group>attack,</group>
+  </rule>
+
+</group>
