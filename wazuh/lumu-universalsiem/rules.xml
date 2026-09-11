@@ -1,0 +1,97 @@
+<!--
+  -  Lumu UniversalSIEM connector rules
+  -  Ref: WS-41500
+  -  Requires decoders.xml (lumu-universalsiem and children) to be loaded first.
+  -
+  -  This program is a free software; you can redistribute it and/or modify
+  -  it under the terms of GPLv2.
+-->
+
+<group name="lumu,universalsiem,">
+
+  <rule id="100700" level="0" noalert="1">
+    <decoded_as>lumu-universalsiem</decoded_as>
+    <description>Lumu UniversalSIEM connector messages grouped.</description>
+  </rule>
+
+  <rule id="100701" level="3">
+    <if_sid>100700</if_sid>
+    <match>STARTING PROGRAM</match>
+    <description>Lumu UniversalSIEM connector service started.</description>
+    <group>lumu_service,</group>
+  </rule>
+
+  <rule id="100702" level="3">
+    <if_sid>100700</if_sid>
+    <field name="thread">\.+</field>
+    <description>Lumu UniversalSIEM worker thread started: $(thread).</description>
+    <group>lumu_service,</group>
+  </rule>
+
+  <rule id="100703" level="3">
+    <if_sid>100700</if_sid>
+    <field name="status">^Open$</field>
+    <description>Lumu UniversalSIEM WebSocket connection established.</description>
+    <group>lumu_service,</group>
+  </rule>
+
+  <rule id="100704" level="3">
+    <if_sid>100700</if_sid>
+    <field name="labels_count">\.+</field>
+    <description>Lumu UniversalSIEM loaded $(labels_count) label(s) into cache.</description>
+    <group>lumu_service,</group>
+  </rule>
+
+  <rule id="100705" level="3">
+    <if_sid>100700</if_sid>
+    <field name="queue_pending">\.+</field>
+    <description>Lumu UniversalSIEM is processing $(queue_pending) queued message(s) from the $(queue) queue.</description>
+    <group>lumu_queue,</group>
+  </rule>
+
+  <rule id="100706" level="3">
+    <if_sid>100700</if_sid>
+    <field name="queue_size">\.+</field>
+    <description>Lumu UniversalSIEM queued a new $(event_type) message ($(queue_size) message(s) pending in the $(queue) queue).</description>
+    <group>lumu_queue,</group>
+  </rule>
+
+  <rule id="100707" level="3">
+    <if_sid>100700</if_sid>
+    <field name="processed_index">\.+</field>
+    <description>Lumu UniversalSIEM processed incident event $(event_type) ($(incident_id)) [$(processed_index)/$(processed_total)].</description>
+    <group>lumu_queue,</group>
+  </rule>
+
+  <rule id="100708" level="5">
+    <if_sid>100700</if_sid>
+    <field name="adversary_type">\.+</field>
+    <field name="event_type">^NewIncidentCreated$</field>
+    <description>Lumu UniversalSIEM dispatched a new incident: $(incident_id) (adversary type: $(adversary_type)).</description>
+    <group>lumu_incident,incident_new,</group>
+  </rule>
+
+  <rule id="100709" level="5">
+    <if_sid>100700</if_sid>
+    <field name="adversary_type">\.+</field>
+    <field name="event_type">^IncidentUpdated$</field>
+    <description>Lumu UniversalSIEM dispatched an incident update: $(incident_id) (adversary type: $(adversary_type)).</description>
+    <group>lumu_incident,incident_update,</group>
+  </rule>
+
+  <rule id="100710" level="7">
+    <if_sid>100700</if_sid>
+    <field name="adversary_type">\.+</field>
+    <field name="event_type">^IncidentBuiltInResponseUpdated$</field>
+    <description>Lumu UniversalSIEM dispatched an automated built-in response update for incident $(incident_id) (adversary type: $(adversary_type)).</description>
+    <group>lumu_incident,incident_response,</group>
+  </rule>
+
+  <rule id="100711" level="10">
+    <if_sid>100708,100709,100710</if_sid>
+    <field name="adversary_type">^Malware$</field>
+    <description>Lumu UniversalSIEM - Malware-related incident activity: $(incident_id) ($(event_type)).</description>
+    <group>lumu_incident,malware,</group>
+  </rule>
+
+</group>

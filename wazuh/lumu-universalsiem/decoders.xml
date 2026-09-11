@@ -1,0 +1,106 @@
+<!--
+  -  Lumu UniversalSIEM connector decoders
+  -  Ref: WS-41500
+  -
+  -  UniversalSIEM is the local connector/forwarder Lumu uses to relay
+  -  incident data to a customer's SIEM. Its application log lines look like:
+  -
+  -    <timestamp> | <LEVEL> | <module> <function> <line> | <message>
+  -
+  -  Example:
+  -    Sep 10 19:35:30 | INFO | event_dispatcher dispatch 13 | UniversalSIEM - Sending [Event: NewIncidentCreated + IncidentId: c7cc5ef0-ad4e-11f1-85aa-13eca15c3bb0 + Adversaries type: Malware]
+  -
+  -  This program is a free software; you can redistribute it and/or modify
+  -  it under the terms of GPLv2.
+-->
+
+<!--
+Sep 10 19:30:33 | INFO | runner runner 100 | [dashes] STARTING PROGRAM [dashes]
+Sep 10 19:35:30 | INFO | event_dispatcher dispatch 13 | UniversalSIEM - Sending [Event: NewIncidentCreated + IncidentId: c7cc5ef0-ad4e-11f1-85aa-13eca15c3bb0 + Adversaries type: Malware]
+-->
+<decoder name="lumu-universalsiem">
+  <prematch>^\S+\s+\d+\s+\S+\s+\|\s+\S+\s+\|\s+\S+\s+\S+\s+\d+\s+\|</prematch>
+  <regex>^\S+\s+\d+\s+\S+\s+\|\s+(\S+)\s+\|\s+(\S+)\s+(\S+)\s+(\d+)\s+\|\s*</regex>
+  <order>log_level,module,function,line</order>
+</decoder>
+
+<!--
+Sep 10 19:30:33 | INFO | runner runner 100 | [dashes] STARTING PROGRAM [dashes]
+-->
+<decoder name="lumu-universalsiem-startup">
+  <parent>lumu-universalsiem</parent>
+  <prematch offset="after_parent">STARTING PROGRAM</prematch>
+</decoder>
+
+<!--
+Sep 10 19:30:33 | INFO | runner start_ws_producer 38 | UniversalSIEM - thread-universalsiem-ws-producer started
+Sep 10 19:30:33 | INFO | runner start_consumer 52 | UniversalSIEM - thread-universalsiem-consumer started
+Sep 10 19:30:33 | INFO | runner start_updates_consumer 67 | UniversalSIEM - thread-universalsiem-updates-consumer started
+-->
+<decoder name="lumu-universalsiem-thread">
+  <parent>lumu-universalsiem</parent>
+  <prematch offset="after_parent">^UniversalSIEM - thread-\S+ started$</prematch>
+  <regex offset="after_parent">^UniversalSIEM - (thread-\S+) started$</regex>
+  <order>thread</order>
+</decoder>
+
+<!--
+Sep 10 19:30:33 | INFO | web_socket on_open 60 | UniversalSIEM - WebSocket Open
+-->
+<decoder name="lumu-universalsiem-websocket">
+  <parent>lumu-universalsiem</parent>
+  <prematch offset="after_parent">^UniversalSIEM - WebSocket \S+$</prematch>
+  <regex offset="after_parent">^UniversalSIEM - WebSocket (\S+)$</regex>
+  <order>status</order>
+</decoder>
+
+<!--
+Sep 10 19:35:30 | INFO | labels load 47 | LabelsCache loaded 6 labels
+-->
+<decoder name="lumu-universalsiem-labels">
+  <parent>lumu-universalsiem</parent>
+  <prematch offset="after_parent">^LabelsCache loaded \d+ labels$</prematch>
+  <regex offset="after_parent">^LabelsCache loaded (\d+) labels$</regex>
+  <order>labels_count</order>
+</decoder>
+
+<!--
+Sep 10 19:35:29 | INFO | producer producer 25 | UniversalSIEM - New message of type NewIncidentCreated added to main queue. Size: 1
+Sep 10 19:35:29 | INFO | producer producer 20 | UniversalSIEM - Updated message of type IncidentUpdated added to updates queue. Size: 1
+-->
+<decoder name="lumu-universalsiem-queue-add">
+  <parent>lumu-universalsiem</parent>
+  <prematch offset="after_parent">^UniversalSIEM - \S+ message of type \S+ added to \S+ queue. Size: \d+$</prematch>
+  <regex offset="after_parent">^UniversalSIEM - \S+ message of type (\S+) added to (\S+) queue. Size: (\d+)$</regex>
+  <order>event_type,queue,queue_size</order>
+</decoder>
+
+<!--
+Sep 10 19:35:30 | INFO | consumer main_message_consumer 32 | UniversalSIEM - MainQueue - Processing 1 messages from the queue
+-->
+<decoder name="lumu-universalsiem-queue-status">
+  <parent>lumu-universalsiem</parent>
+  <prematch offset="after_parent">^UniversalSIEM - \S+ - Processing \d+ messages from the queue$</prematch>
+  <regex offset="after_parent">^UniversalSIEM - (\S+) - Processing (\d+) messages from the queue$</regex>
+  <order>queue,queue_pending</order>
+</decoder>
+
+<!--
+Sep 10 19:35:30 | INFO | consumer main_message_consumer 35 | UniversalSIEM - MainQueue - Message [Event: NewIncidentCreated + IncidentId: c7cc5ef0-ad4e-11f1-85aa-13eca15c3bb0] being processed. 1/1
+-->
+<decoder name="lumu-universalsiem-processing">
+  <parent>lumu-universalsiem</parent>
+  <prematch offset="after_parent">^UniversalSIEM - \S+ - Message \[Event: \S+ \p IncidentId: \S+\] being processed. \d+/\d+$</prematch>
+  <regex offset="after_parent">^UniversalSIEM - (\S+) - Message \[Event: (\S+) \p IncidentId: (\S+)\] being processed. (\d+)/(\d+)$</regex>
+  <order>queue,event_type,incident_id,processed_index,processed_total</order>
+</decoder>
+
+<!--
+Sep 10 19:35:30 | INFO | event_dispatcher dispatch 13 | UniversalSIEM - Sending [Event: NewIncidentCreated + IncidentId: c7cc5ef0-ad4e-11f1-85aa-13eca15c3bb0 + Adversaries type: Malware]
+-->
+<decoder name="lumu-universalsiem-dispatch">
+  <parent>lumu-universalsiem</parent>
+  <prematch offset="after_parent">^UniversalSIEM - Sending \[Event: \S+ \p IncidentId: \S+ \p Adversaries type: \S+\]$</prematch>
+  <regex offset="after_parent">^UniversalSIEM - Sending \[Event: (\S+) \p IncidentId: (\S+) \p Adversaries type: (\S+)\]$</regex>
+  <order>event_type,incident_id,adversary_type</order>
+</decoder>
