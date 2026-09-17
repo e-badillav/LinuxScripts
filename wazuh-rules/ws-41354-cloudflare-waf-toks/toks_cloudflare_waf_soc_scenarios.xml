@@ -1,0 +1,277 @@
+<!--
+  =========================================================================
+  toks_cloudflare_waf_soc_scenarios.xml
+  Ubicacion sugerida: /var/ossec/etc/rules/toks_cloudflare_waf_soc_scenarios.xml
+
+  TICKET: WS-41354 - "Validacion Reglas CloudFlare"
+  CLIENTE: Cyberpeace // Grupo Restaurantero Gigante (Toks, Shake Shack,
+           A Comer Club, El Farolito) - dominios: toks.com.mx,
+           shakeshack.com.mx, acomerclub.com.mx, elfarolito.com.mx (y
+           subdominios, ej. efactura., portaldefacturas., crm., api.,
+           bi., cafeblockchain., www.)
+
+  Cubre los 3 escenarios pedidos por el SOC del cliente en el comentario
+  del 2026-09-07 sobre WS-41354:
+    1. Enumeracion masiva de API / IDOR sobre
+       /api/v2/oracle/taco-line/contacts/phone/{numero}         -> 199700-199705
+    2. Abuso de token de portal cautivo en /new-password?kds=... -> 199710-199711
+    3. Acceso/exposicion de archivos SQL/backup en servidor web  -> 199720-199722
+
+  Rango usado: 199700-199722. NO colisiona con los rangos ya existentes
+  en toks_custom_rules_consolidated.xml (100190-100196, 199500-199543,
+  199600-199665) ni con las reglas overwrite 92502-92516.
+
+  FUENTE DE DATOS: decoder JSON de Cloudflare ya integrado (grupo WAF).
+  Campos usados, todos dentro del JSON parseado:
+    data.ClientRequestURI, data.ClientRequestUserAgent,
+    data.EdgeResponseStatus, data.ClientRequestReferer, data.ClientIP
+
+  PREREQUISITOS (mismos que ya documenta el cliente en su consolidado):
+    1. Confirmar con wazuh-logtest que data.ClientIP se mapea a srcip.
+       Si NO se mapea, sustituir <same_srcip/> por
+       <same_field>data.ClientIP</same_field> en 199701, 199711, 199722
+       (igual que se indica para 199502/199510 en el archivo consolidado).
+    2. PCRE2 compilado en el manager (ya usado por reglas 100193/199500/
+       199610 del cliente, así que ya deberia estar disponible).
+    3. Regla base 92511 (nivel 7, cloudflare_waf_overwrite.xml) activa y
+       ya filtrando /new-password + parametro kds - las reglas 199710 y
+       199711 son hijas de esa regla y NO la reemplazan.
+    4. Cargar la CDB list de IPs de infraestructura propia (ver
+       toks_own_infra_ips en esta misma carpeta) para que 199705 funcione.
+       Sin esa lista poblada, TODAS las IPs externas dispararan la regla
+       (comportamiento seguro por defecto, pero hay que llenarla con la
+       infraestructura real del cliente: oficinas, VPN, NAT de otros
+       servicios propios, etc.).
+
+  PENDIENTE DE CONFIRMAR CON EL CLIENTE (valores placeholder marcados
+  abajo con "AJUSTAR"):
+    - Horario de negocio exacto y zona horaria (se asume Mexico/CST,
+      Lunes-Viernes 08:00-20:00, por el campo de región del ticket).
+    - Lista completa de dominios propios para el chequeo de "referer
+      externo" en 199710 (se uso la lista de dominios vista en las
+      muestras de log adjuntas al ticket: toks.com.mx, shakeshack.com.mx,
+      acomerclub.com.mx, elfarolito.com.mx). Confirmar si kloudspot.com
+      (proveedor de portal cautivo, referer visto en logs reales) debe
+      tratarse como dominio propio/autorizado o como externo: el SOC lo
+      dio como ejemplo de dominio externo a vigilar en el ticket, pero
+      aparece como referer legitimo en trafico real de /new-password, por
+      lo que conviene validarlo con el cliente antes de pasar esta regla
+      a modo de bloqueo/respuesta activa.
+
+  EVIDENCIA REAL confirmada en los logs adjuntos al ticket (Logs-SQL.xlsx):
+    136.67.185.85 obtuvo HTTP 200 en /sql/backup.sql, /sql/dump.sql y
+    /sql/db.sql sobre www.toks.com.mx el 2026-09-04. Esto es una brecha
+    activa confirmada bajo el escenario 3b (regla 199721) y deberia
+    revisarse de inmediato si aun no se hizo.
+
+  VERSION WAZUH TARGET: 4.x
+  =========================================================================
+-->
+
+
+<!-- ======================================================================
+     ESCENARIO 1: ENUMERACION MASIVA DE API / IDOR
+     Endpoint: /api/v2/oracle/taco-line/contacts/phone/{numero}
+     Rango: 199700-199705
+     ====================================================================== -->
+
+<group name="WAF,Cloudflare,api_enumeration,">
+
+  <!-- 199700: peticion GET contra el endpoint de enumeracion de contactos.
+       No se filtra por user-agent: el ticket dice que "incluye" curl/axios
+       como comportamiento tipico, no como condicion obligatoria - filtrar
+       por UA dejaria pasar la misma enumeracion hecha con otra herramienta. -->
+  <rule id="199700" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="data.ClientRequestURI" type="pcre2">(?i)^/api/v\d+/oracle/taco-line/contacts/phone/</field>
+    <field name="data.ClientRequestMethod">^GET$</field>
+    <description>Cloudflare WAF: GET request to taco-line contacts-by-phone endpoint $(data.ClientRequestURI) from $(srcip) [HTTP $(data.EdgeResponseStatus)]</description>
+    <group>api_enumeration,web_api,recon,</group>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- 199701: patron de volumen - alerta ALTA. Mas de 10 peticiones en 2
+       minutos desde la misma IP (frequency=11 porque en Wazuh frequency=N
+       dispara al alcanzar N coincidencias, y "mas de 10" = 11 o mas). -->
+  <rule id="199701" level="12" frequency="11" timeframe="120">
+    <if_matched_sid>199700</if_matched_sid>
+    <same_srcip />
+    <description>Cloudflare WAF: HIGH - 11+ requests in 120s from $(srcip) against taco-line phone enumeration endpoint on $(data.ClientRequestHost) - possible automated IDOR/API enumeration</description>
+    <group>api_enumeration,web_api,recon,idor,pci_dss_6.5.8,nist_800_53_SI.4,</group>
+    <mitre>
+      <id>T1190</id>
+      <id>T1083</id>
+    </mitre>
+  </rule>
+
+  <!-- 199702: dentro de la secuencia de enumeracion, el endpoint respondio
+       200 - confirma que el numero consultado es un dato valido. Nivel
+       moderado por si solo; sirve de base a las dos alertas criticas de
+       abajo (199703/199704/199705). -->
+  <rule id="199702" level="7">
+    <if_sid>199700</if_sid>
+    <field name="data.EdgeResponseStatus">^200$</field>
+    <description>Cloudflare WAF: taco-line phone enumeration returned 200 OK on $(data.ClientRequestHost)$(data.ClientRequestURI) from $(srcip) - valid contact record found</description>
+    <group>api_enumeration,idor,data_exfiltration,</group>
+    <mitre>
+      <id>T1190</id>
+      <id>T1005</id>
+    </mitre>
+  </rule>
+
+  <!-- 199703: alerta CRITICA independiente #1 - el 200 ocurre fuera del
+       horario de negocio diario. AJUSTAR el rango horario/zona horaria
+       con el cliente (placeholder: Lunes-Viernes, fuera de 08:00-20:00
+       hora Mexico/CST). -->
+  <rule id="199703" level="14">
+    <if_sid>199702</if_sid>
+    <time negate="yes">08:00-20:00</time>
+    <description>Cloudflare WAF: CRITICAL - valid taco-line contact record retrieved (HTTP 200) OUTSIDE business hours from $(srcip) on $(data.ClientRequestHost)$(data.ClientRequestURI) - possible confirmed IDOR exploitation</description>
+    <group>api_enumeration,idor,data_exfiltration,pci_dss_10.6.1,nist_800_53_SI.4,gdpr_IV_35.7.d,</group>
+    <mitre>
+      <id>T1190</id>
+      <id>T1005</id>
+      <id>T1530</id>
+    </mitre>
+  </rule>
+
+  <!-- 199704: alerta CRITICA independiente #2 - el 200 ocurre en fin de
+       semana (complementa 199703, ya que <time> y <weekday> no se pueden
+       combinar en OR dentro de una sola regla). -->
+  <rule id="199704" level="14">
+    <if_sid>199702</if_sid>
+    <weekday>weekends</weekday>
+    <description>Cloudflare WAF: CRITICAL - valid taco-line contact record retrieved (HTTP 200) on a WEEKEND from $(srcip) on $(data.ClientRequestHost)$(data.ClientRequestURI) - possible confirmed IDOR exploitation</description>
+    <group>api_enumeration,idor,data_exfiltration,pci_dss_10.6.1,nist_800_53_SI.4,gdpr_IV_35.7.d,</group>
+    <mitre>
+      <id>T1190</id>
+      <id>T1005</id>
+      <id>T1530</id>
+    </mitre>
+  </rule>
+
+  <!-- 199705: alerta CRITICA independiente #3 - el 200 viene de una IP que
+       NO esta en la CDB list de infraestructura propia del cliente. Ver
+       toks_own_infra_ips en esta carpeta: hay que poblarla con las IPs/
+       rangos legitimos (oficinas, VPN, integraciones internas) antes de
+       activar esta regla, si no, toda IP externa (incluida la del cliente
+       final normal) la disparara. -->
+  <rule id="199705" level="14">
+    <if_sid>199702</if_sid>
+    <list field="srcip" lookup="not_address_match_key">etc/lists/toks_own_infra_ips</list>
+    <description>Cloudflare WAF: CRITICAL - valid taco-line contact record retrieved (HTTP 200) from $(srcip), an IP OUTSIDE own infrastructure, on $(data.ClientRequestHost)$(data.ClientRequestURI) - possible confirmed IDOR exploitation</description>
+    <group>api_enumeration,idor,data_exfiltration,pci_dss_10.6.1,nist_800_53_SI.4,gdpr_IV_35.7.d,</group>
+    <mitre>
+      <id>T1190</id>
+      <id>T1005</id>
+      <id>T1530</id>
+    </mitre>
+  </rule>
+
+</group>
+
+
+<!-- ======================================================================
+     ESCENARIO 2: ABUSO DE TOKEN DE PORTAL CAUTIVO EN /new-password
+     Regla base 92511 (nivel 7) YA EXISTE en cloudflare_waf_overwrite.xml
+     y ya filtra /new-password + parametro kds - aqui solo se agregan las
+     reglas hijas pedidas por el SOC.
+     Rango: 199710-199711
+     ====================================================================== -->
+
+<group name="WAF,Cloudflare,token_abuse,">
+
+  <!-- 199710: el mismo evento base (92511), pero el Referer apunta a un
+       dominio que NO es propio (vacio = navegacion directa, se excluye).
+       El SOC menciona kloudspot.com como ejemplo de dominio a vigilar en
+       este flujo (ver nota de dominio propio/externo al inicio del
+       archivo) - AJUSTAR la lista de dominios propios segun se confirme
+       con el cliente. -->
+  <rule id="199710" level="10">
+    <if_sid>92511</if_sid>
+    <field name="data.ClientRequestReferer" type="pcre2" negate="yes">^$|(?i)^https?://([a-z0-9-]+\.)*(toks\.com\.mx|shakeshack\.com\.mx|acomerclub\.com\.mx|elfarolito\.com\.mx)(/|$)</field>
+    <description>Cloudflare WAF: password-reset token (kds) request on $(data.ClientRequestHost) with EXTERNAL referer $(data.ClientRequestReferer) from $(srcip) - possible token leakage via Referer header</description>
+    <group>token_abuse,authentication_failed,pci_dss_8.2,hipaa_164.312.d,</group>
+    <mitre>
+      <id>T1110.004</id>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- 199711: regla de frecuencia pedida explicitamente por el SOC encima
+       de la regla base 92511 (no de 199710): 5+ disparos del mismo evento
+       en 5 minutos desde la misma IP = automatizacion deliberada. -->
+  <rule id="199711" level="13" frequency="5" timeframe="300">
+    <if_matched_sid>92511</if_matched_sid>
+    <same_srcip />
+    <description>Cloudflare WAF: CRITICAL - 5+ password-reset token (kds) requests in 300s from $(srcip) on $(data.ClientRequestHost) - deliberate automation against captive-portal reset token, not a browsing mistake</description>
+    <group>token_abuse,authentication_failed,brute_force,pci_dss_8.2,hipaa_164.312.d,nist_800_53_AC.7,gdpr_IV_35.7.d,</group>
+    <mitre>
+      <id>T1110.004</id>
+    </mitre>
+  </rule>
+
+</group>
+
+
+<!-- ======================================================================
+     ESCENARIO 3: ACCESO A ARCHIVOS SQL/BACKUP EXPUESTOS (MAS URGENTE)
+     Rango: 199720-199722
+
+     EVIDENCIA REAL en Logs-SQL.xlsx: 136.67.185.85 obtuvo 200 OK en
+     /sql/backup.sql, /sql/dump.sql y /sql/db.sql sobre www.toks.com.mx
+     el 2026-09-04 11:34:40Z - dispara 199721 (brecha confirmada).
+     ====================================================================== -->
+
+<group name="WAF,Cloudflare,sql_exposure,">
+
+  <!-- 199720: capa de visibilidad - cualquier peticion a rutas/archivos
+       tipo SQL/backup/config, sin importar el codigo de respuesta.
+       Incluye "sql%2e" (variante URL-encoded vista en logs reales:
+       /admin/sql%2econf) ademas de las extensiones/rutas pedidas. -->
+  <rule id="199720" level="5">
+    <decoded_as>json</decoded_as>
+    <field name="data.ClientRequestURI" type="pcre2">(?i)(\.sql\b|\.bak\b|\.dump\b|\.conf\b|sql%2e|/sql/|/backup/|/admin/sql|\.env\b)</field>
+    <description>Cloudflare WAF [SQL exposure]: request to SQL/backup/config-like path $(data.ClientRequestHost)$(data.ClientRequestURI) from $(srcip) [HTTP $(data.EdgeResponseStatus)]</description>
+    <group>sql_exposure,recon,web_scanner,pci_dss_6.5.8,</group>
+    <mitre>
+      <id>T1083</id>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- 199721: CRITICO - el archivo SQL/backup se sirvio con 200 OK, es
+       decir, fue descargado exitosamente. Brecha activa confirmada.
+       Nivel 15 para asegurar notificacion inmediata (verificar que el
+       umbral de alerta por correo/notificacion del manager cubra nivel
+       15, ej. email_alert_level o el nivel configurado en el integrador
+       usado por el cliente). -->
+  <rule id="199721" level="15">
+    <if_sid>199720</if_sid>
+    <field name="data.EdgeResponseStatus">^200$</field>
+    <description>Cloudflare WAF [SQL exposure]: CRITICAL - SQL/backup/config file SUCCESSFULLY DOWNLOADED (HTTP 200) from $(data.ClientRequestHost)$(data.ClientRequestURI) by $(srcip) - CONFIRMED ACTIVE BREACH, escalate immediately</description>
+    <group>sql_exposure,data_exfiltration,pci_dss_6.5.8,pci_dss_10.6.1,hipaa_164.312.e.1,nist_800_53_SI.4,gdpr_IV_35.7.d,tsc_cc6.8,</group>
+    <mitre>
+      <id>T1005</id>
+      <id>T1530</id>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+  <!-- 199722: correlacion de frecuencia - la misma IP consulta 5+ de estas
+       rutas en 10 minutos, indica escaneo automatizado aunque todos los
+       intentos individuales hayan sido bloqueados (403/404). -->
+  <rule id="199722" level="12" frequency="5" timeframe="600">
+    <if_matched_sid>199720</if_matched_sid>
+    <same_srcip />
+    <description>Cloudflare WAF [SQL exposure]: 5+ SQL/backup/config path probes in 600s from $(srcip) on $(data.ClientRequestHost) - automated scanning for exposed database files</description>
+    <group>sql_exposure,recon,web_scanner,pci_dss_6.5.8,nist_800_53_SI.4,</group>
+    <mitre>
+      <id>T1083</id>
+      <id>T1190</id>
+    </mitre>
+  </rule>
+
+</group>

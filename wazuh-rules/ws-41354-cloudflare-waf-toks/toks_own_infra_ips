@@ -1,0 +1,17 @@
+# CDB list - Toks/Cyberpeace own infrastructure IPs
+# Ubicacion en el manager: /var/ossec/etc/lists/toks_own_infra_ips
+# Formato: ip_o_rango:descripcion  (una entrada por linea)
+#
+# Usada por la regla 199705 (toks_cloudflare_waf_soc_scenarios.xml) con
+# lookup="not_address_match_key": cualquier srcip que NO aparezca aqui se
+# considera "fuera de la infraestructura propia".
+#
+# PENDIENTE: reemplazar los ejemplos de abajo con las IPs/rangos reales
+# del cliente (oficinas, salidas VPN, NAT de integraciones internas como
+# Oracle/Kloudspot si se confirma que son propias, etc.) antes de activar
+# 199705 en produccion. Sin esto poblado correctamente, la regla trata
+# toda IP como externa.
+#
+# Ejemplos (BORRAR y reemplazar por valores reales confirmados):
+# 200.1.2.3:oficina-CDMX
+# 10.10.0.0/16:VPN-corporativa
