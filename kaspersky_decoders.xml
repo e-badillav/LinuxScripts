@@ -1,0 +1,49 @@
+<!--
+  Custom decoders for Kaspersky Endpoint Security (KES) and Kaspersky Security
+  Center (KSC) events forwarded over syslog. Written for WS-41739.
+
+  Three message shapes were found in the sample events:
+
+  1. kaspersky-kes
+     Raw KES agent log, fields separated by a literal "\r\n" and prefixed
+     with a UTF-8 BOM, e.g.:
+       KES|11.0.0.0 <BOM>Tipo de evento: ...\r\nNombre: ...\r\nUsuario: ...
+
+  2. kaspersky-ksc-audit
+     Plain KSC administration-server audit sentence, e.g.:
+       1093|1.0.0.0 User "alice" has connected to the Administration Server
+       from "10.0.0.5".
+
+  3. kaspersky-ksc-detailed
+     KSC event forwarded with an RFC5424-style structured-data block
+     identified by the Kaspersky PEN (23668), e.g.:
+       1093|1.0.0.0 - KLAUD_EV_SERVERCONNECT [event@23668 p2="..." et="..."
+       etdn="..." hdn="..." hip="..." gn="..." kscfqdn="..."] <message>
+     This shape is generic: it captures whatever et/etdn/hdn/hip/gn/kscfqdn/
+     pN attributes are present, so it also covers KSC event codes not shown
+     in the sample (e.g. the numeric codes 000007e6/000007e4).
+
+  Assumption: log collection is via syslog, so Wazuh's own header parsing
+  has already stripped the leading "<timestamp> <hostname> " before the
+  decoder sees the log. Each prematch below also tolerates that prefix
+  still being present, in case logs are collected some other way (e.g. a
+  script feeding a local log file) - see the accompanying README.
+-->
+
+<decoder name="kaspersky-kes">
+  <prematch type="pcre2">^(?:\S+ \S+ )?KES\|[\d.]+ </prematch>
+  <regex type="pcre2" offset="after_prematch">^(?:\xEF\xBB\xBF)?Tipo de evento: (.*?)\\r\\nNombre: (.*?)\\r\\nRuta de la aplicaci\xC3\xB3n: (.*?)\\r\\n(?:ID del proceso: (.*?)\\r\\n)?(?:(?=.*?Usuario: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Componente: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Descripci\xC3\xB3n del resultado: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Tipo: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Tipo: [^\\]*?\\r\\nNombre: ([^\\]*?)\\r\\n))?(?:(?=.*?Nivel de amenaza: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Precisi\xC3\xB3n: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Tipo del objeto: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Objeto: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Ruta al objeto: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Nombre del objeto: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?Raz\xC3\xB3n: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?SHA256: ([^\\]*?)(?:\\r\\n|$)))?(?:(?=.*?MD5: ([^\\]*?)(?:\\r\\n|$)))?</regex>
+  <order>kaspersky.event_type,kaspersky.process_name,kaspersky.application_path,kaspersky.process_id,kaspersky.user,kaspersky.component,kaspersky.result,kaspersky.threat_type,kaspersky.threat_name,kaspersky.threat_level,kaspersky.precision,kaspersky.object_type,kaspersky.object,kaspersky.object_path,kaspersky.object_name,kaspersky.reason,kaspersky.sha256,kaspersky.md5</order>
+</decoder>
+
+<decoder name="kaspersky-ksc-audit">
+  <prematch type="pcre2">^(?:\S+ \S+ )?\d+\|[\d.]+ User "</prematch>
+  <regex type="pcre2" offset="after_prematch">^([^"]*)" has connected to the Administration Server from "([^"]*)"\.$</regex>
+  <order>srcuser,srcip</order>
+</decoder>
+
+<decoder name="kaspersky-ksc-detailed">
+  <prematch type="pcre2">^(?:\S+ \S+ )?\S+\|[\d.]+ - </prematch>
+  <regex type="pcre2" offset="after_prematch">^(\S+) \[event@23668(?:(?=.*? et="([^"]*)"))?(?:(?=.*? etdn="([^"]*)"))?(?:(?=.*? tdn="([^"]*)"))?(?:(?=.*? hdn="([^"]*)"))?(?:(?=.*? hip="([^"]*)"))?(?:(?=.*? gn="([^"]*)"))?(?:(?=.*? kscfqdn="([^"]*)"))?(?:(?=.*? p2="([^"]*)"))?(?:(?=.*? p3="([^"]*)"))?(?:(?=.*? p5="([^"]*)"))?(?:(?=.*? p9="([^"]*)"))?[^\]]*\] (.*)$</regex>
+  <order>kaspersky.event_id,kaspersky.et,kaspersky.etdn,kaspersky.tdn,kaspersky.hdn,kaspersky.hip,kaspersky.gn,kaspersky.kscfqdn,kaspersky.p2,kaspersky.p3,kaspersky.p5,kaspersky.p9,kaspersky.message</order>
+</decoder>

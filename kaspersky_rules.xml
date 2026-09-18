@@ -1,0 +1,150 @@
+<!--
+  Custom rules for Kaspersky Endpoint Security (KES) and Kaspersky Security
+  Center (KSC) events. Written for WS-41739, built on top of the decoders
+  in kaspersky_decoders.xml (kaspersky-kes, kaspersky-ksc-audit,
+  kaspersky-ksc-detailed).
+
+  All <field> matches use type="pcre2" so alternation/anchors behave
+  predictably regardless of the manager's default regex engine.
+
+  ID range used: 100200-100216 (adjust if it collides with existing local
+  rules on the target manager).
+-->
+<group name="kaspersky,">
+
+  <!-- ============================================================ -->
+  <!-- Base / classification rules - one per decoder                -->
+  <!-- ============================================================ -->
+
+  <rule id="100200" level="3">
+    <decoded_as>kaspersky-kes</decoded_as>
+    <description>Kaspersky Endpoint Security (KES) event: $(kaspersky.event_type).</description>
+    <group>kes,</group>
+  </rule>
+
+  <rule id="100201" level="3">
+    <decoded_as>kaspersky-ksc-audit</decoded_as>
+    <description>Kaspersky Security Center: user "$(srcuser)" connected to the Administration Server from $(srcip).</description>
+    <group>ksc,authentication_success,</group>
+  </rule>
+
+  <rule id="100202" level="3">
+    <decoded_as>kaspersky-ksc-detailed</decoded_as>
+    <description>Kaspersky Security Center event: $(kaspersky.etdn).</description>
+    <group>ksc,</group>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- kaspersky-kes children (malware, tampering, status events)   -->
+  <!-- ============================================================ -->
+
+  <rule id="100203" level="12">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^No se puede desinfectar$</field>
+    <description>Kaspersky KES: unable to disinfect threat "$(kaspersky.threat_name)" found in $(kaspersky.object).</description>
+    <group>virus,malware,</group>
+  </rule>
+
+  <rule id="100204" level="10">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^Objeto eliminado$</field>
+    <description>Kaspersky KES: malicious object "$(kaspersky.threat_name)" deleted - $(kaspersky.object).</description>
+    <group>virus,malware,</group>
+  </rule>
+
+  <rule id="100205" level="7">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^Se ha creado una copia de seguridad del objeto$</field>
+    <description>Kaspersky KES: backup created for detected threat "$(kaspersky.threat_name)" ($(kaspersky.object_path)$(kaspersky.object_name)).</description>
+    <group>virus,</group>
+  </rule>
+
+  <rule id="100206" level="6">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^Las bases de datos están muy desactualizadas$</field>
+    <description>Kaspersky KES: antivirus signature databases are severely outdated on the endpoint.</description>
+    <group>outdated_signatures,</group>
+  </rule>
+
+  <rule id="100207" level="5">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^Tarea detenida$</field>
+    <description>Kaspersky KES: protection task "$(kaspersky.object_name)" ($(kaspersky.component)) was stopped.</description>
+  </rule>
+
+  <rule id="100208" level="12">
+    <if_sid>100207</if_sid>
+    <field name="kaspersky.component" type="pcre2">^(Protección frente a amenazas en archivos|Firewall|Prevención de intrusiones en el host|Anti-Cryptor|Protección frente a amenazas web|Protección frente a amenazas en la red|Prevención de exploits)$</field>
+    <description>Kaspersky KES: critical protection component "$(kaspersky.component)" was stopped - possible tampering with endpoint security controls.</description>
+    <group>tampering,</group>
+  </rule>
+
+  <rule id="100209" level="12">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^Componentes de protección desactivados$</field>
+    <description>Kaspersky KES: protection components were disabled on the endpoint by user "$(kaspersky.user)".</description>
+    <group>tampering,</group>
+  </rule>
+
+  <rule id="100210" level="3">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^Directiva de grupo aplicada$</field>
+    <description>Kaspersky KES: group policy applied.</description>
+    <group>configuration_changed,</group>
+  </rule>
+
+  <rule id="100211" level="3">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^Servidores de KSN disponibles$</field>
+    <description>Kaspersky KES: Kaspersky Security Network (KSN) servers are available.</description>
+  </rule>
+
+  <rule id="100212" level="3">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type" type="pcre2">^La participación en KSN está activada$</field>
+    <description>Kaspersky KES: Kaspersky Security Network (KSN) participation is enabled.</description>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- kaspersky-ksc-audit children (Administration Server logons)  -->
+  <!-- ============================================================ -->
+
+  <rule id="100213" level="3">
+    <if_sid>100201</if_sid>
+    <field name="srcuser" type="pcre2">^OpenApi-</field>
+    <description>Kaspersky Security Center: OpenAPI service account "$(srcuser)" connected to the Administration Server.</description>
+  </rule>
+
+  <rule id="100214" level="5">
+    <if_sid>100201</if_sid>
+    <field name="srcip" type="pcre2" negate="yes">^(127\.0\.0\.1|0\.0\.0\.0)$</field>
+    <description>Kaspersky Security Center: administrator "$(srcuser)" connected to the Administration Server from a non-local address ($(srcip)).</description>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- kaspersky-ksc-detailed children (structured-data audit feed) -->
+  <!-- ============================================================ -->
+
+  <rule id="100215" level="3">
+    <if_sid>100202</if_sid>
+    <field name="kaspersky.et" type="pcre2">^KLAUD_EV_SERVERCONNECT$</field>
+    <description>Kaspersky Security Center: $(kaspersky.message)</description>
+    <group>authentication_success,</group>
+  </rule>
+
+  <!--
+    et is matched here (not etdn) because the KSC server appears to mangle
+    accented characters in etdn/tdn when it re-emits an endpoint event
+    through this structured-data channel (e.g. "Protecci..n" instead of
+    "Protección" - see kaspersky_decoders_README.md). The numeric et codes
+    below were observed for "Servidores de KSN disponibles" (000007e6) and
+    "La participación en KSN está activada" (000007e4); add more codes here
+    as they are identified on this KSC installation.
+  -->
+  <rule id="100216" level="3">
+    <if_sid>100202</if_sid>
+    <field name="kaspersky.et" type="pcre2">^(000007e6|000007e4)$</field>
+    <description>Kaspersky Security Center: $(kaspersky.etdn) (host: $(kaspersky.hdn)).</description>
+  </rule>
+
+</group>
