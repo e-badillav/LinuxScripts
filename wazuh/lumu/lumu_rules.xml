@@ -1,0 +1,153 @@
+<!--
+  Lumu UniversalSIEM - reglas personalizadas (WS-41500)
+  Ruta: /var/ossec/etc/rules/lumu_rules.xml
+  Requiere: /var/ossec/etc/decoders/lumu_decoders.xml
+
+  Niveles segun la tabla enviada por el cliente:
+    - NewIncidentCreated -> valor maximo del rango indicado.
+    - IncidentUpdated    -> valor minimo del rango indicado.
+  Si un incidente tiene varios tipos de adversario, Wazuh evalua primero la
+  regla hija de mayor nivel, por lo que se aplica la severidad mas alta.
+-->
+
+<!-- ID: 111000 - 111099 -->
+
+<group name="lumu,">
+
+    <rule id="111000" level="0">
+        <decoded_as>lumu-universalsiem</decoded_as>
+        <description>Lumu UniversalSIEM: mensajes de la integración.</description>
+    </rule>
+
+    <!-- Salud de la integracion -->
+    <rule id="111001" level="3">
+        <if_sid>111000</if_sid>
+        <match>STARTING PROGRAM</match>
+        <description>Lumu UniversalSIEM: la integración se inició.</description>
+        <group>lumu_integration,</group>
+    </rule>
+
+    <rule id="111002" level="3">
+        <if_sid>111000</if_sid>
+        <match>WebSocket Open</match>
+        <description>Lumu UniversalSIEM: conexión WebSocket con Lumu abierta.</description>
+        <group>lumu_integration,</group>
+    </rule>
+
+    <rule id="111003" level="5">
+        <if_sid>111000</if_sid>
+        <field name="lumu.log_level">^ERROR$|^CRITICAL$</field>
+        <description>Lumu UniversalSIEM: la integración reportó un evento $(lumu.log_level) en $(lumu.module).$(lumu.function).</description>
+        <group>lumu_integration,lumu_integration_error,</group>
+    </rule>
+
+    <!-- Nuevo incidente -->
+    <rule id="111010" level="3">
+        <if_sid>111000</if_sid>
+        <match>- Sending [Event:</match>
+        <field name="lumu.event_type">^NewIncidentCreated$</field>
+        <description>Lumu: nuevo incidente $(lumu.incident_id) - Tipo de adversario: $(lumu.adversary_type).</description>
+        <group>lumu_incident,lumu_new_incident,</group>
+    </rule>
+    <rule id="111011" level="15">
+        <if_sid>111010</if_sid>
+        <field name="lumu.adversary_type">C2C</field>
+        <description>Lumu: nuevo incidente - Comunicación con Command &amp; Control (C2C). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_c2c,</group>
+    </rule>
+    <rule id="111012" level="15">
+        <if_sid>111010</if_sid>
+        <field name="lumu.adversary_type">Malware</field>
+        <description>Lumu: nuevo incidente - Infraestructura asociada a malware (Malware). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_malware,</group>
+    </rule>
+    <rule id="111013" level="14">
+        <if_sid>111010</if_sid>
+        <field name="lumu.adversary_type">DGA</field>
+        <description>Lumu: nuevo incidente - Dominio generado algorítmicamente (DGA). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_dga,</group>
+    </rule>
+    <rule id="111014" level="14">
+        <if_sid>111010</if_sid>
+        <field name="lumu.adversary_type">Mining</field>
+        <description>Lumu: nuevo incidente - Cryptomining (Mining). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_mining,</group>
+    </rule>
+    <rule id="111015" level="14">
+        <if_sid>111010</if_sid>
+        <field name="lumu.adversary_type">Phishing</field>
+        <description>Lumu: nuevo incidente - Infraestructura de phishing (Phishing). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_phishing,</group>
+    </rule>
+    <rule id="111016" level="12">
+        <if_sid>111010</if_sid>
+        <field name="lumu.adversary_type">Anonymizer</field>
+        <description>Lumu: nuevo incidente - Uso de infraestructura anonimizada (Anonymizer). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_anonymizer,</group>
+    </rule>
+    <rule id="111017" level="10">
+        <if_sid>111010</if_sid>
+        <field name="lumu.adversary_type">Spam</field>
+        <description>Lumu: nuevo incidente - Actividad asociada a spam (Spam). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_spam,</group>
+    </rule>
+    <!-- Incidente actualizado -->
+    <rule id="111020" level="3">
+        <if_sid>111000</if_sid>
+        <match>- Sending [Event:</match>
+        <field name="lumu.event_type">^IncidentUpdated$</field>
+        <description>Lumu: incidente actualizado $(lumu.incident_id) - Tipo de adversario: $(lumu.adversary_type).</description>
+        <group>lumu_incident,lumu_updated_incident,</group>
+    </rule>
+    <rule id="111021" level="14">
+        <if_sid>111020</if_sid>
+        <field name="lumu.adversary_type">C2C</field>
+        <description>Lumu: incidente actualizado - Comunicación con Command &amp; Control (C2C). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_c2c,</group>
+    </rule>
+    <rule id="111022" level="14">
+        <if_sid>111020</if_sid>
+        <field name="lumu.adversary_type">Malware</field>
+        <description>Lumu: incidente actualizado - Infraestructura asociada a malware (Malware). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_malware,</group>
+    </rule>
+    <rule id="111023" level="12">
+        <if_sid>111020</if_sid>
+        <field name="lumu.adversary_type">DGA</field>
+        <description>Lumu: incidente actualizado - Dominio generado algorítmicamente (DGA). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_dga,</group>
+    </rule>
+    <rule id="111024" level="12">
+        <if_sid>111020</if_sid>
+        <field name="lumu.adversary_type">Mining</field>
+        <description>Lumu: incidente actualizado - Cryptomining (Mining). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_mining,</group>
+    </rule>
+    <rule id="111025" level="12">
+        <if_sid>111020</if_sid>
+        <field name="lumu.adversary_type">Phishing</field>
+        <description>Lumu: incidente actualizado - Infraestructura de phishing (Phishing). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_phishing,</group>
+    </rule>
+    <rule id="111026" level="10">
+        <if_sid>111020</if_sid>
+        <field name="lumu.adversary_type">Anonymizer</field>
+        <description>Lumu: incidente actualizado - Uso de infraestructura anonimizada (Anonymizer). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_anonymizer,</group>
+    </rule>
+    <rule id="111027" level="8">
+        <if_sid>111020</if_sid>
+        <field name="lumu.adversary_type">Spam</field>
+        <description>Lumu: incidente actualizado - Actividad asociada a spam (Spam). Incidente: $(lumu.incident_id).</description>
+        <group>lumu_spam,</group>
+    </rule>
+    <!-- Respuesta automatica (built-in response) de Lumu actualizada -->
+    <rule id="111030" level="3">
+        <if_sid>111000</if_sid>
+        <match>- Sending [Event:</match>
+        <field name="lumu.event_type">^IncidentBuiltInResponseUpdated$</field>
+        <description>Lumu: respuesta automática actualizada para el incidente $(lumu.incident_id) - Tipo de adversario: $(lumu.adversary_type).</description>
+        <group>lumu_incident,lumu_builtin_response,</group>
+    </rule>
+
+</group>

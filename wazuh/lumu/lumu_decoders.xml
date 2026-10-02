@@ -1,0 +1,57 @@
+<!--
+  Lumu UniversalSIEM - decoders personalizados (WS-41500)
+  Ruta: /var/ossec/etc/decoders/lumu_decoders.xml
+
+  Formato de log (logging de Python del conector UniversalSIEM):
+    Sep 10 19:35:30 | INFO | event_dispatcher dispatch 13 | UniversalSIEM - Sending [Event: NewIncidentCreated + IncidentId: c7cc5ef0-ad4e-11f1-85aa-13eca15c3bb0 + Adversaries type: Malware]
+
+  El pre-decoder de Wazuh elimina la fecha "Sep 10 19:35:30" y, como "|" no es
+  un hostname valido, el texto a decodificar empieza en "| INFO | ...".
+  Se usan sibling decoders: cada regex extrae un dato y si no aplica se ignora.
+-->
+
+<decoder name="lumu-universalsiem">
+  <prematch>^\| \w+ \| \w+ \w+ \d+ \|</prematch>
+</decoder>
+
+<!-- Encabezado: nivel de log, modulo, funcion y linea -->
+<decoder name="lumu-universalsiem">
+  <parent>lumu-universalsiem</parent>
+  <regex>^\| (\w+) \| (\w+) (\w+) (\d+) \|</regex>
+  <order>lumu.log_level,lumu.module,lumu.function,lumu.line</order>
+</decoder>
+
+<!-- "... - MainQueue - ..." / "... - UpdatesQueue - ..." -->
+<decoder name="lumu-universalsiem">
+  <parent>lumu-universalsiem</parent>
+  <regex>UniversalSIEM - (\w+) -</regex>
+  <order>lumu.queue</order>
+</decoder>
+
+<!-- "New message of type NewIncidentCreated added to main queue. Size: 1" -->
+<decoder name="lumu-universalsiem">
+  <parent>lumu-universalsiem</parent>
+  <regex>message of type (\w+) added to (\w+) queue. Size: (\d+)</regex>
+  <order>lumu.event_type,lumu.queue,lumu.queue_size</order>
+</decoder>
+
+<!-- "[Event: NewIncidentCreated + ..." -->
+<decoder name="lumu-universalsiem">
+  <parent>lumu-universalsiem</parent>
+  <regex>[Event: (\w+)</regex>
+  <order>lumu.event_type</order>
+</decoder>
+
+<!-- "IncidentId: c7cc5ef0-ad4e-11f1-85aa-13eca15c3bb0" -->
+<decoder name="lumu-universalsiem">
+  <parent>lumu-universalsiem</parent>
+  <regex>IncidentId: (\w+)</regex>
+  <order>lumu.incident_id</order>
+</decoder>
+
+<!-- "Adversaries type: Malware]" -->
+<decoder name="lumu-universalsiem">
+  <parent>lumu-universalsiem</parent>
+  <regex>Adversaries type: (\.+)]</regex>
+  <order>lumu.adversary_type</order>
+</decoder>
