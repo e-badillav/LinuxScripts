@@ -153,7 +153,7 @@ SanerNow REST API  --(HTTPS)-->  custom-sanernow.py (Wazuh manager)
     ```
 
     `event_type` is `missing_patch` or `remediation`. In the alerts, the fields appear under `data.sanernow.*`.
-4. The current time is saved in the state file for the next run.
+4. If every API request and event delivery succeeded, the time the run started is saved in the state file for the next run. If anything failed, the state file is not updated and the next run retries from the same point, so no data is skipped (some events may be sent twice in that case).
 
 **Rules**
 
@@ -215,7 +215,7 @@ INFO - [sanernow] Fetched <N> remediation records from SanerNow
 INFO - [sanernow] SanerNow integration run completed. Events sent: <N>
 ```
 
-`HTTP error` or `Connection error` lines point to a wrong URL, endpoint or credentials.
+`HTTP error` or `Connection error` lines point to a wrong URL, endpoint or credentials. When a run fails, the log also shows `Errors during this run; state not updated` and the next run retries the same period.
 
 **3. Check that the events reach Wazuh**
 

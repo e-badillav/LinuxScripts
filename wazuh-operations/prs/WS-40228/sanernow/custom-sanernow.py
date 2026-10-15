@@ -74,12 +74,11 @@ def get_last_poll_time():
     return fallback.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def save_last_poll_time():
-    """Save current UTC timestamp as last poll time."""
+def save_last_poll_time(timestamp):
+    """Save the given UTC timestamp as last poll time."""
     try:
-        now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         with open(STATE_FILE, "w") as f:
-            f.write(now)
+            f.write(timestamp)
     except Exception as e:
         logger.error("Could not save state file: %s", e)
 
@@ -100,6 +99,7 @@ def get_headers():
 def fetch_missing_patches(since):
     """
     Fetch missing patches / patch compliance data from SanerNow.
+    Returns a list of records, or None if the request failed.
 
     NOTE: Update the endpoint, parameters, and response parsing
     based on the actual SanerNow API documentation.
@@ -146,12 +146,13 @@ def fetch_missing_patches(since):
     except Exception as e:
         logger.error("Unexpected error fetching from SanerNow: %s", e)
 
-    return []
+    return None
 
 
 def fetch_remediation_status(since):
     """
     Fetch remediation/deployment status from SanerNow.
+    Returns a list of records, or None if the request failed.
 
     NOTE: This is a second optional endpoint — include if SanerNow
     provides separate remediation tracking.
@@ -178,7 +179,7 @@ def fetch_remediation_status(since):
 
     except Exception as e:
         logger.error("Error fetching remediation status: %s", e)
-        return []
+        return None
 
 
 # =============================================================================
@@ -191,6 +192,7 @@ def send_event_to_wazuh(event, event_type="missing_patch"):
 
     The event is wrapped in a JSON structure with a consistent label
     so that Wazuh decoders can identify and parse it.
+    Returns True if the event was sent, False otherwise.
     """
     wazuh_event = json.dumps({
         "integration": "sanernow",
@@ -206,8 +208,10 @@ def send_event_to_wazuh(event, event_type="missing_patch"):
         with socket(AF_UNIX, SOCK_DGRAM) as sock:
             sock.connect(SOCKET_ADDR)
             sock.send(payload.encode())
+        return True
     except Exception as e:
         logger.error("Failed to send event to Wazuh socket: %s", e)
+        return False
 
 
 def normalize_event(event):
@@ -244,23 +248,41 @@ def main():
     since = get_last_poll_time()
     logger.info("Polling for changes since: %s", since)
 
+    # Taken before querying the API so records updated during this run
+    # are fetched again on the next one instead of being skipped.
+    poll_started = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
     events_sent = 0
+    failed = False
 
     # Fetch missing patches
     missing_patches = fetch_missing_patches(since)
-    for patch in missing_patches:
-        send_event_to_wazuh(patch, event_type="missing_patch")
-        events_sent += 1
+    if missing_patches is None:
+        failed = True
+    else:
+        for patch in missing_patches:
+            if send_event_to_wazuh(patch, event_type="missing_patch"):
+                events_sent += 1
+            else:
+                failed = True
 
     # Fetch remediation status (optional — remove if not needed)
     remediations = fetch_remediation_status(since)
-    for remediation in remediations:
-        send_event_to_wazuh(remediation, event_type="remediation")
-        events_sent += 1
+    if remediations is None:
+        failed = True
+    else:
+        for remediation in remediations:
+            if send_event_to_wazuh(remediation, event_type="remediation"):
+                events_sent += 1
+            else:
+                failed = True
 
-    # Save state only if successful
-    if events_sent > 0 or (not missing_patches and not remediations):
-        save_last_poll_time()
+    # Save state only if every request and event delivery succeeded, so a
+    # failed run is retried from the same point on the next execution
+    if failed:
+        logger.warning("Errors during this run; state not updated, next run will retry since %s", since)
+    else:
+        save_last_poll_time(poll_started)
 
     logger.info("SanerNow integration run completed. Events sent: %d", events_sent)
     logger.info("=" * 60)

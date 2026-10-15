@@ -11,7 +11,7 @@ Related ticket: WS-40228
 New directory `integrations/integrations/sanernow/`:
 
 - `custom-sanernow.py`: polls the SanerNow API for missing patches and remediation status and sends each record to the Wazuh `analysisd` socket as `{"integration":"sanernow","sanernow":{...}}`.
-  - State file with the time of the last successful poll.
+  - State file with the time of the last successful poll. The state is only updated when every API request and event delivery succeeds, so failed runs are retried instead of skipping data.
   - Normalizes records into common `sanernow.*` fields (hostname, IP, OS, patch, CVE, severity, status, dates, category).
   - Logs to `/var/ossec/logs/integrations.log`.
 - `sanernow_rules.xml`: rules `311000`-`311003` (base, missing patch, high/critical missing patch, remediation). Uses the built-in JSON decoder, so no custom decoder is needed.
