@@ -1,0 +1,177 @@
+<!--
+  Custom decoders - Kaspersky Cloud (KES endpoint + KSC/Administration Server)
+  Ticket: WS-41739
+  Tested against the 30 sample events attached to the ticket (KES endpoint
+  protection events in Spanish, plain KSC "has connected" audit lines, and
+  the structured "[event@23668 ...]" Administration Server events).
+
+  Reference: https://documentation.wazuh.com/current/user-manual/ruleset/ruleset-xml-syntax/decoders.html
+             https://documentation.wazuh.com/current/user-manual/ruleset/decoders/sibling-decoders.html
+-->
+
+
+<decoder name="kaspersky-cloud">
+  <prematch type="pcre2">\S+\|\d+\.\d+\.\d+\.\d+\s</prematch>
+</decoder>
+
+<!-- ===================== KES endpoint events (Spanish) =====================
+     Fields are separated by the literal 2-character sequence \r\n inside
+     the message body (not real CR/LF) - confirmed on the 30 samples. -->
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Tipo de evento: (.*?)\\r\\n</regex>
+  <order>kaspersky.event_type</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">\\r\\nNombre: (.*?)\\r\\nRuta de la aplicación</regex>
+  <order>kaspersky.process_name</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Ruta de la aplicación: (.*?)\\r\\n</regex>
+  <order>kaspersky.process_path</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">(?:ID del proceso|Id\. de proceso): (\d+)</regex>
+  <order>kaspersky.pid</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Descripción del resultado: (.*?)\\r\\n</regex>
+  <order>kaspersky.result</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Tipo: (.*?)\\r\\n</regex>
+  <order>kaspersky.threat_type</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Tipo: .*?\\r\\nNombre: (.*?)\\r\\n</regex>
+  <order>kaspersky.threat_name</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Usuario: (.*?)(?:\\r\\n|$)</regex>
+  <order>kaspersky.subject_user</order>
+</decoder>
+
+<!-- Some KES event types (e.g. "No se puede desinfectar", "Objeto eliminado")
+     report the affected object as a single field. -->
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Objeto: (.*?)\\r\\n</regex>
+  <order>kaspersky.object</order>
+</decoder>
+
+<!-- Other KES event types (e.g. "Se ha creado una copia de seguridad del
+     objeto") split the same information across three fields instead.
+     kaspersky.object_name is also populated here so rule descriptions have
+     a single, always-available field to reference regardless of which of
+     the two formats a given event uses. -->
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Tipo del objeto: (.*?)\\r\\n</regex>
+  <order>kaspersky.object_type</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Ruta al objeto: (.*?)\\r\\n</regex>
+  <order>kaspersky.object_path</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Nombre del objeto: (.*?)(?:\\r\\n|$)</regex>
+  <order>kaspersky.object_name</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">(?:Razón|Motivo): (.*?)\\r\\n</regex>
+  <order>kaspersky.reason</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">SHA256: ([0-9A-Fa-f]+)</regex>
+  <order>kaspersky.sha256</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">MD5: ([0-9A-Fa-f]+)(?:\\r\\n|$)</regex>
+  <order>kaspersky.md5</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">Componente: (.*?)(?:\\r\\n|$)</regex>
+  <order>kaspersky.component</order>
+</decoder>
+
+<!-- ============ KSC / Administration Server audit and status events ============ -->
+
+<!-- Present both as a bare message and inside the "[event@23668 ...] "
+     structured block, e.g.:
+     User "test@test.com" has connected to the Administration Server from "0.0.0.0". -->
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">User "(.*?)" has connected to the Administration Server from "([^"]*)"</regex>
+  <order>kaspersky.subject_user,kaspersky.src_ip</order>
+</decoder>
+
+<!-- Structured Administration Server events, e.g.:
+     - KLAUD_EV_SERVERCONNECT [event@23668 et="..." etdn="..." hdn="..." hip="..." gn="..." kscfqdn="..."] -->
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">-\s+(\S+)\s+\[event@23668</regex>
+  <order>kaspersky.event_id</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">\bet="(.*?)"</regex>
+  <order>kaspersky.event_code</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">etdn="(.*?)"</regex>
+  <order>kaspersky.event_description</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">hdn="(.*?)"</regex>
+  <order>kaspersky.admin_server_name</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">hip="(.*?)"</regex>
+  <order>kaspersky.admin_server_ip</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">gn="(.*?)"</regex>
+  <order>kaspersky.group</order>
+</decoder>
+
+<decoder name="kaspersky-cloud-fields">
+  <parent>kaspersky-cloud</parent>
+  <regex type="pcre2">kscfqdn="(.*?)"</regex>
+  <order>kaspersky.ksc_fqdn</order>
+</decoder>

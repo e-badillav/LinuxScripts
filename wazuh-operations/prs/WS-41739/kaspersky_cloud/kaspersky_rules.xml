@@ -1,0 +1,97 @@
+<!--
+  Custom rules - Kaspersky Cloud (KES endpoint + KSC/Administration Server)
+  Ticket: WS-41739
+  Requires kaspersky_decoders.xml (decoder "kaspersky-cloud").
+
+  Reference: https://documentation.wazuh.com/current/user-manual/ruleset/ruleset-xml-syntax/rules.html
+             https://documentation.wazuh.com/current/user-manual/ruleset/custom.html
+
+-->
+
+
+<group name="kaspersky_cloud,">
+
+  <rule id="100200" level="3">
+    <decoded_as>kaspersky-cloud</decoded_as>
+    <description>Kaspersky Cloud: event received</description>
+  </rule>
+
+  <!-- === KES endpoint: informational / operational events === -->
+
+  <rule id="100201" level="3">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type">^Directiva de grupo aplicada$</field>
+    <description>Kaspersky: group policy applied on $(kaspersky.process_name)</description>
+    <group>kaspersky_policy,</group>
+  </rule>
+
+  <rule id="100202" level="3">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type">^Servidores de KSN disponibles$|^La participación en KSN está activada$</field>
+    <description>Kaspersky: KSN status reported</description>
+    <group>kaspersky_ksn,</group>
+  </rule>
+
+  <rule id="100203" level="7">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type">^Las bases de datos están muy desactualizadas$</field>
+    <description>Kaspersky: signature database is severely outdated on $(kaspersky.process_name)</description>
+    <group>kaspersky_outdated,</group>
+  </rule>
+
+  <!-- === KES endpoint: protection tampering / degradation === -->
+
+  <rule id="100204" level="10">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type">^Tarea detenida$</field>
+    <description>Kaspersky: protection component $(kaspersky.component) was stopped</description>
+    <group>kaspersky_tampering,</group>
+  </rule>
+
+  <rule id="100205" level="12">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.event_type">^Componentes de protección desactivados$</field>
+    <description>Kaspersky: protection components disabled on the endpoint</description>
+    <group>kaspersky_tampering,</group>
+  </rule>
+
+  <!-- === KES endpoint: malware detections, split by remediation outcome ===
+       Severity reflects whether the security control succeeded or not,
+       rather than a fixed level per event type. -->
+
+  <rule id="100206" level="7">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.threat_type">\.+</field>
+    <field name="kaspersky.result">^Eliminado$|^Copia de seguridad creada$|^Desinfectado$</field>
+    <description>Kaspersky: threat $(kaspersky.threat_name) detected and neutralized ($(kaspersky.result)) on $(kaspersky.object)$(kaspersky.object_name)</description>
+    <group>kaspersky_malware,virus,pci_dss_10.6.1,gpg13_4.3,gdpr_IV_35.7.d,</group>
+  </rule>
+
+  <rule id="100207" level="12">
+    <if_sid>100200</if_sid>
+    <field name="kaspersky.threat_type">\.+</field>
+    <field name="kaspersky.result">^No procesado$|^Error$</field>
+    <description>Kaspersky: threat $(kaspersky.threat_name) detected, NOT remediated ($(kaspersky.result)) on $(kaspersky.object)$(kaspersky.object_name)</description>
+    <group>kaspersky_malware,virus,pci_dss_10.6.1,gpg13_4.3,gdpr_IV_35.7.d,</group>
+  </rule>
+
+  <!-- Backstop by keyword, in case a future event carries a threat_type/result
+       combination not covered above. Keep only one of the two (100206/100207
+       pair vs. this one) if you see it firing on already-classified events. -->
+
+  <rule id="100208" level="13">
+    <if_sid>100200</if_sid>
+    <match>Virus|Malware|Ransomware|Adware|Troyano</match>
+    <description>Kaspersky: threat detected (keyword match) on $(kaspersky.object)$(kaspersky.object_name)</description>
+    <group>kaspersky_malware,virus,</group>
+  </rule>
+
+  <!-- === KSC / Administration Server: audit events === -->
+
+  <rule id="100210" level="3">
+    <if_sid>100200</if_sid>
+    <match>has connected to the Administration Server</match>
+    <description>Kaspersky: $(kaspersky.subject_user) connected to the Administration Console from $(kaspersky.src_ip)</description>
+    <group>kaspersky_audit,authentication_success,</group>
+  </rule>
+</group>
