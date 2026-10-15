@@ -59,6 +59,11 @@ if grep -rnEi '(api[_-]?key|token|password|secret)\s*=\s*"[^"]{20,}"' "$SRC"; th
     exit 1
 fi
 
+if [[ ! -d "$OPS_REPO/.git" ]]; then
+    echo "Error: $OPS_REPO is not a git clone of wazuh/operations." >&2
+    echo "Set OPS_REPO with 'export OPS_REPO=/path/to/operations' or run 'OPS_REPO=/path/to/operations $0 ...'." >&2
+    exit 1
+fi
 cd "$OPS_REPO"
 if [[ -n "$(git status --porcelain)" ]]; then
     echo "Error: $OPS_REPO has uncommitted changes. Commit or stash them first." >&2
