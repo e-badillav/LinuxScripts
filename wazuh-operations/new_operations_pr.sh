@@ -10,7 +10,7 @@
 #
 #   ticket      Jira ticket key, e.g. WS-39601
 #   source_dir  Prepared folder, e.g. prs/WS-39601/okta
-#   dest_path   Path inside the repo (default: integrations/<basename of source_dir>)
+#   dest_path   Path inside the repo (default: integrations/integrations/<basename of source_dir>)
 #   title       PR title (default: "Add <name> integration")
 #
 # The PR body is read from <source_dir>/../PR_DESCRIPTION.md if it exists.
@@ -32,7 +32,7 @@ fi
 TICKET="$1"
 SRC="$(cd "$2" && pwd)"
 NAME="$(basename "$SRC")"
-DEST="${3:-integrations/$NAME}"
+DEST="${3:-integrations/integrations/$NAME}"
 TITLE="${4:-Add $NAME integration}"
 OPS_REPO="${OPS_REPO:-$HOME/operations}"
 BASE="${BASE:-main}"
